@@ -73,10 +73,4 @@ If you use **Syn_Tool** in your research, please cite:
 
 For questions or issues, please contact:
 
-**Yanhui Wang**
-
-Email: wangyanhui991124@163.com
-
-Affiliation: State Key Laboratory of Marine Environmental Science and College of Ocean and Earth Sciences, Xiamen University
-
 ---
