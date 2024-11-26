@@ -51,10 +51,10 @@ def run_mothur_NB(input_fasta):
         If successful, print a success message and the output; if failed, print the error message and exit the loop.
         '''
         if result.returncode == 0:
-            print(f"Mothur命令 '{cmd}' 运行成功。")
+            print(f"Mothur command '{cmd}' ran successfully")
             print(result.stdout)
         else:
-            print(f"Mothur命令 '{cmd}' 运行失败。")
+            print(f"Mothur command '{cmd}' failed to run")
             print(result.stderr)
             break
 
