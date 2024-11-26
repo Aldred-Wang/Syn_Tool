@@ -454,7 +454,7 @@ def cluster_sequences(abundance_file, unclassified_df, eps_range=(0.075, 0.1, 0.
     max_clusters = 0
 
     for eps in np.arange(*eps_range):
-        labels = DBSCAN(eps=eps, min_samples=5, metric='precomputed').fit_predict(dist_matrix)
+        labels = DBSCAN(eps=eps, min_samples=100, metric='precomputed').fit_predict(dist_matrix)
         num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         if num_clusters > max_clusters or (num_clusters == max_clusters and (best_eps is None or eps < best_eps)):
             max_clusters, best_eps, best_labels = num_clusters, eps, labels
@@ -465,7 +465,7 @@ def cluster_sequences(abundance_file, unclassified_df, eps_range=(0.075, 0.1, 0.
     result = expanded_df[['Cluster', 'Sequence_ID']].drop_duplicates(subset='Sequence_ID')
     result = result[result['Cluster'] != -1]
     result['Cluster'] = 'Novel_' + result['Cluster'].astype(str)
-    result.columns = ['Clade' if col == 'Cluster' else col for col in df.columns]
+    result.columns = ['Clade' if col == 'Cluster' else col for col in result.columns]
     result['Predicted_Probability'] = 'Novel'
     
     return result
