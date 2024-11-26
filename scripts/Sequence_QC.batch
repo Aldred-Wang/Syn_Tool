@@ -1,0 +1,41 @@
+# Mothur Batch Script for ITS Sequence Processing
+# This script processes ITS sequences using mothur, including quality control, sequence trimming, and OTU clustering.
+
+# Script Workflow
+# 1. **Set Input Directory**: Defines the working directory for input files.
+# 2. **Fastq File Info**: Reads FASTQ files and extracts metadata.
+# 3. **Rename Files**: Standardizes file names at different steps.
+# 4. **Sequence Trimming**: Removes ambiguous bases and long homopolymers.
+# 5. **PCR Amplification**: Simulates PCR trimming with user-defined parameters.
+# 6. **Length Filtering**: Retains sequences within specified length ranges.
+# 7. **Clustering**: Groups sequences into OTUs based on a 97% similarity cutoff.
+# 8. **Remove Rare OTUs**: Filters out rare OTUs with fewer than a specified number of sequences.
+
+# Replace "path/to/your/data" with the actual directory containing your input files
+set.dir(input=path/to/your/data)
+
+fastq.info(file=CS_ITS.txt, pacbio=T)
+
+rename.file(fasta=current, count=current, prefix=CS)
+
+trim.seqs(fasta=CS.fasta, count=CS.count_table, maxambig=0, maxhomop=10)
+
+rename.file(fasta=current, count=current, prefix=CS.qc)
+
+pcr.seqs(fasta=CS.qc.fasta, oligos=oligos.txt, pdiffs=3, rdiffs=3, checkorient=t)
+
+rename.file(fasta=current, prefix=CS.qc.pcr)
+
+trim.seqs(fasta=CS.qc.pcr.fasta, minlength=200, maxlength=1400)
+
+rename.file(fasta=current, prefix=CS.qc.pcr.lentrim)
+
+unique.seqs(fasta=CS.qc.pcr.lentrim.fasta, count=CS.count_table)
+
+rename.file(fasta=current, count=current, prefix=CS.qc.pcr.lentrim.unique)
+
+cluster(fasta=CS.qc.pcr.lentrim.unique.fasta, count=CS.qc.pcr.lentrim.unique.count_table, method = dgc, cutoff=0.03)
+
+rename.file(list=current, new=CS.qc.pcr.lentrim.unique.clstr.list)
+
+remove.rare(list=CS.qc.pcr.lentrim.unique.clstr.list, count=CS.qc.pcr.lentrim.unique.count_table, nseqs=1, label=0.03)
