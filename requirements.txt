@@ -1,0 +1,10 @@
+argparse
+re
+pandas
+numpy
+keras
+tokenizers
+biopython
+scipy
+scikit-learn
+joblib
