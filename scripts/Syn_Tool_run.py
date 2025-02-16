@@ -18,6 +18,7 @@ import pickle
 import joblib
 from sklearn.cluster import DBSCAN
 from sklearn.metrics.pairwise import cosine_distances
+import shutil
 
 
 # Run Mothur's RDP classification
@@ -172,11 +173,6 @@ def transformer_classify_sequences(input_fasta, tokenizer, model):
     '''
     Syn_df = result_df[result_df['Predicted Label'] == 0]
     Syn_df = Syn_df[['Seq_id', 'Sequence']]
-
-    with open('Syn.fasta', 'w') as fasta_file:
-        for seq_id, seq in zip(Syn_df['Seq_id'], Syn_df['Sequence']):
-            fasta_file.write(f">{seq_id}\n{seq}\n")
-    print("FASTA file 'Syn.fasta' has been generated, containing sequences with Predicted Label 0.")
 
     return Syn_df
 
@@ -447,6 +443,9 @@ def cluster_sequences(abundance_file, unclassified_df, eps_range=(0.075, 0.1, 0.
                             and a 'Predicted_Probability' column indicating "Novel".
     """
     abundance_data = pd.read_csv(abundance_file, sep='\t', header=None, names=['Sequence_ID', 'abundance'])
+    unclassified_df['Sequence_ID'] = unclassified_df['Sequence_ID'].astype(str)
+    abundance_data['Sequence_ID'] = abundance_data['Sequence_ID'].astype(str)
+
     df = pd.merge(unclassified_df, abundance_data, on='Sequence_ID', how='left')
     expanded_df = df.loc[df.index.repeat(df['abundance'])]
     dist_matrix = cosine_distances(expanded_df.drop(columns=['Sequence_ID', 'abundance'], errors='ignore'))
@@ -454,7 +453,7 @@ def cluster_sequences(abundance_file, unclassified_df, eps_range=(0.075, 0.1, 0.
     max_clusters = 0
 
     for eps in np.arange(*eps_range):
-        labels = DBSCAN(eps=eps, min_samples=100, metric='precomputed').fit_predict(dist_matrix)
+        labels = DBSCAN(eps=eps, min_samples=50, metric='precomputed').fit_predict(dist_matrix)
         num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         if num_clusters > max_clusters or (num_clusters == max_clusters and (best_eps is None or eps < best_eps)):
             max_clusters, best_eps, best_labels = num_clusters, eps, labels
@@ -485,6 +484,9 @@ def main():
     5. Identify potential novel sequences and cluster unclassified sequences.
     6. Save all intermediate and final results to files.
     """
+    
+    initial_files = set(os.listdir()) 
+    
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run Mothur commands and classify sequences using Transformer and CNN models")
     parser.add_argument('-fa', '--fasta', required=True, help='Fasta file output from Mothur processing')
@@ -506,32 +508,56 @@ def main():
     except FileNotFoundError as e:
         print(e)
         return  # Exit the program if the file is not found
-
+    
+    new_files = set(os.listdir())
+    new_files_created = new_files - initial_files
+    new_dir = f"{input_fasta[:-6]}.Syn_Tool"
+    os.makedirs(new_dir)
+    for file in new_files_created:
+        file_path = os.path.join(os.getcwd(), file)
+        if os.path.isfile(file_path):
+            shutil.move(file_path, os.path.join(new_dir, file))
+    
     # Step 3: Classify sequences using the Transformer model
     transformer_tokenizer = 'Transformer_BPE_tokenizer.1024.json'
     transformer_model = 'Transformer_model.h5'
-    Syn_df = transformer_classify_sequences(fasta_file, transformer_tokenizer, transformer_model)
-    Syn_df.to_csv('Syn_df.csv', index=False, header=False)  # Save intermediate results
+    new_fasta_file = f'./{new_dir}/{fasta_file}'
+    Syn_df = transformer_classify_sequences(new_fasta_file, transformer_tokenizer, transformer_model)
+    Syn_df.to_csv(f'./{new_dir}/Syn_df.csv', index=False, header=False)  # Save intermediate results
+    with open(f'./{new_dir}/Syn.fasta', 'w') as Syn_fasta:
+        for seq_id, seq in zip(Syn_df['Seq_id'], Syn_df['Sequence']):
+            Syn_fasta.write(f">{seq_id}\n{seq}\n")
+    print("FASTA file 'Syn.fasta' has been generated, containing sequences with Predicted Label 0.")
 
     # Step 4: Further process the classified sequences using a CNN model
     CNN_tokenizer = 'CNN_kmer_tokenizer.pkl'
     CNN_model = 'CNN_model.h5'
     CNN_label_encoder = 'CNN_label_encoder.pkl'
     combined_df = CNN_process(Syn_df, CNN_tokenizer, CNN_model, CNN_label_encoder)
-    combined_df.to_csv('combined_df.csv', index=False)  # Save combined results
+    combined_df.to_csv(f'./{new_dir}/combined_df.csv', index=False)  # Save combined results
 
     # Step 5: Identify potential novel sequences and filter/classify sequences
     potential_novel_sequences, unclassified_df, classified_df = classify_known_identify_unknown(
         combined_df, threshold=0.15
     )
+    
+    if not unclassified_df.empty:
+        
+        # Step 6: Cluster unclassified sequences into novel groups
+        result = cluster_sequences(input_abundance, unclassified_df)
+        result.to_csv(f'./{new_dir}/result.csv', index=False)  # Save clustering results
 
-    # Step 6: Cluster unclassified sequences into novel groups
-    result = cluster_sequences(input_abundance, unclassified_df)
-    result.to_csv('result.csv', index=False)  # Save clustering results
-
-    # Step 7: Combine classified and clustered results
-    final_df = pd.concat([classified_df, result], ignore_index=True)
-    final_df.to_csv('Syn_Tool_final_result.txt', sep='\t', index=False)  # Save final output
+        # Step 7: Combine classified and clustered results
+        final_df = pd.concat([classified_df, result], ignore_index=True)
+        final_df.to_csv(f'./{new_dir}/Syn_Tool_final_result.txt', sep='\t', index=False)  # Save final output
+        
+        print("Final results saved to 'Syn_Tool_final_result.txt'")
+        
+    else:
+        
+        classified_df.to_csv(f'./{new_dir}/Syn_Tool_final_result.txt', sep='\t', index=False)  # Save final output
+        print("No potential novel sequences found. Skipping the novel clade delineation module.")
+        print("Final results saved to 'Syn_Tool_final_result.txt'")
 
 
 if __name__ == "__main__":
